@@ -132,13 +132,7 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer.UIElement
 
             foreach (var sorted in sortedColumns)
             {
-                copy.Add(new SortColumnDescription
-                {
-                    column = sorted.column,
-                    columnIndex = sorted.columnIndex,
-                    columnName = sorted.columnName,
-                    direction = sorted.direction
-                });
+                copy.Add(CloneSortColumnDescription(sorted));
             }
 
             return copy;
@@ -168,13 +162,25 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer.UIElement
 
         static SortColumnDescription CloneSortColumnDescription(SortColumnDescription sorted)
         {
-            return new SortColumnDescription
+            var description = new SortColumnDescription
             {
-                column = sorted.column,
                 columnIndex = sorted.columnIndex,
-                columnName = sorted.columnName,
+                columnName = GetSortColumnName(sorted),
                 direction = sorted.direction
             };
+            return description;
+        }
+
+        static string GetSortColumnName(SortColumnDescription sorted)
+        {
+            if (!string.IsNullOrEmpty(sorted.columnName))
+                return sorted.columnName;
+
+            var column = sorted.column;
+            if (column == null)
+                return string.Empty;
+
+            return !string.IsNullOrEmpty(column.name) ? column.name : column.title;
         }
 
         public static void SortListBySortedColumns<T>(MultiColumnListView table, List<T> list)
