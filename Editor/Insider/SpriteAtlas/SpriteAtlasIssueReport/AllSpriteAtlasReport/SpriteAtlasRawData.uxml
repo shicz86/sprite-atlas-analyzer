@@ -1,0 +1,33 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" noNamespaceSchemaLocation="../../../../../../UIElementsSchema/UIElements.xsd"
+         editor-extension-mode="False">
+    <Style src="./SpriteAtlasRawData.uss"/>
+    <Style src="../UIElement/StyleSheet/Icon.uss"/>
+    <ui:Template name="cell-template"
+                 src="../UIElement/CellLabelWithIcon/CellLabelWithIcon.uxml"/>
+    <ui:MultiColumnTreeView name="Table" show-alternating-row-backgrounds="ContentOnly" horizontal-scrolling="true"
+                            sorting-enabled="true" class="table">
+        <ui:Columns primary-column-name="Name" resize-preview="false">
+            <ui:Column name="Name" title="Name" sortable="true" cell-template="cell-template" binding-path="name" width="80px"/>
+            <ui:Column name="Sprites" title="Sprites" sortable="true" cell-template="cell-template" binding-path="sprites"
+                       width="100px"/>
+            <ui:Column name="Total Memory" title="Total Memory" sortable="true" cell-template="cell-template" binding-path="totalMemory"
+                       width="80px"/>
+            <ui:Column name="Unused Memory" title="Unused Memory" sortable="true" cell-template="cell-template"
+                       binding-path="unusedMemory" width="80px"/>
+            <ui:Column name="Area Usage %" title="Usage" sortable="true" cell-template="cell-template" binding-path="usage"
+                       width="80px"/>
+            <ui:Column name="Total Area" title="Total Area" sortable="true" cell-template="cell-template" binding-path="totalArea"
+                       width="80px"/>
+            <ui:Column name="Used Area" title="Used Area" sortable="true" cell-template="cell-template" binding-path="usedArea"
+                       width="80px"/>
+            <ui:Column name="Width" title="Width" sortable="true" cell-template="cell-template" binding-path="width" width="80px"/>
+            <ui:Column name="Height" title="Height" sortable="true" cell-template="cell-template" binding-path="height" width="80px"/>
+            <ui:Column name="Pages" title="Pages" sortable="true" cell-template="cell-template" binding-path="pages" width="80px"/>
+            <ui:Column name="Packing Mode" title="Packing Mode" sortable="true" cell-template="cell-template" binding-path="packingMode"
+                       width="80px"/>
+            <ui:Column name="Texture Format" title="Texture Format" sortable="true" cell-template="cell-template"
+                       binding-path="textureFormat" width="80px"/>
+        </ui:Columns>
+    </ui:MultiColumnTreeView>
+    <ui:Label name="NoDataLabel" class="no-data-label" text="No issues found"/>
+</ui:UXML>

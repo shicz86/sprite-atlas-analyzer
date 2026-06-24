@@ -1,0 +1,21 @@
+{
+  "name": "Unity.2D.SpriteAtlasAnalyzer.Editor",
+  "rootNamespace": "UnityEditor.U2D.SpriteAtlasAnalyzer",
+  "references": [
+    "Unity.Collections",
+    "Unity.Jobs",
+    "Unity.2D.Sprite.Editor",
+    "UnityEngine.UI"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

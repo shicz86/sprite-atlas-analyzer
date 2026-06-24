@@ -1,0 +1,31 @@
+:root {
+    flex: 1 1 0;
+}
+
+.table {
+    flex: 1 1 0;
+    height: 100%;
+}
+
+.unity-multi-column-header__column--sortable {
+    flex-direction: row;
+}
+
+.unity-multi-column-header__sort-indicator {
+    flex-shrink: 0;
+    visibility: visible;
+}
+
+.unity-multi-column-header__column--sorted .unity-multi-column-header__sort-indicator {
+    opacity: 1;
+}
+
+#unity-multi-column-header-column-title{
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.no-data-label{
+    flex: 1 1 0;
+    -unity-text-align: middle-center;
+    overflow: hidden;
+}
