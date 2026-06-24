@@ -6,7 +6,37 @@ Based on the architecture of Unity 6 `com.unity.2d.tooling` Sprite Atlas Analyze
 
 ## Installation
 
-1. Copy this folder into your project's `Packages/` directory, **or** add to `manifest.json`:
+### Option A: Git URL (recommended)
+
+1. Open your Unity project's `Packages/manifest.json` and add:
+
+```json
+{
+  "dependencies": {
+    "com.unity.2d.sprite-atlas-analyzer": "https://github.com/shicz86/sprite-atlas-analyzer.git"
+  }
+}
+```
+
+Pin a branch, tag, or commit (recommended for reproducible installs):
+
+```json
+"com.unity.2d.sprite-atlas-analyzer": "https://github.com/shicz86/sprite-atlas-analyzer.git#master"
+```
+
+```json
+"com.unity.2d.sprite-atlas-analyzer": "https://github.com/shicz86/sprite-atlas-analyzer.git#v1.0.0"
+```
+
+2. Unity Package Manager will clone the repo automatically. Wait for import to finish.
+
+**Via Package Manager UI:** **Window > Package Manager > + > Add package from git URL…** and paste the URL above.
+
+**Requirements:** Git must be installed and on your PATH. The repository root must contain `package.json` (this repo is already structured correctly).
+
+### Option B: Local folder
+
+Copy this folder into your project's `Packages/` directory, **or** add to `manifest.json`:
 
 ```json
 {
@@ -16,7 +46,9 @@ Based on the architecture of Unity 6 `com.unity.2d.tooling` Sprite Atlas Analyze
 }
 ```
 
-2. Open **Window > Analysis > Sprite Atlas Analyzer**.
+### Open the tool
+
+Open **Window > Analysis > Sprite Atlas Analyzer**.
 
 ## Built-in Reports
 
