@@ -15,6 +15,8 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
         VisualElement m_IssueView;
         MultiColumnTreeView m_Table;
         List<TreeViewItemData<SourceTextureWithCompressionCellData>> m_TableData = new();
+        readonly List<(string bindingPath, int direction)> m_SortKeys = new();
+        bool m_ApplyingSort;
         Label m_NoDataLabel;
         SpriteAtlasDataSource m_DataSource;
         public SourceTextureWithCompressionIssue(): base(new [] {typeof(SpriteAtlasDataSource)})
@@ -95,30 +97,27 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             await UpdateTableView(false);
         }
 
-        async Task UpdateTableView(bool keepExpand, bool sortUpdate = false)
+        async Task UpdateTableView(bool keepExpand)
         {
             if (m_DataSource == null)
                 return;
             ShowTable(false, "Filtering data in progress...");
             var saveFile = Utilities.LoadSaveDataFromFile<ReportSaveDataRoot<SourceTextureWithCompressionCellData>>(k_SaveFilePath);
-            if (!sortUpdate)
+            if (saveFile == null || m_DataSource.lastCaptureTime != saveFile.lastCaptureTime)
             {
-                if (saveFile == null || m_DataSource.lastCaptureTime != saveFile.lastCaptureTime)
+                m_TableData = await FilterDataAsync(m_DataSource.data);
+                Utilities.WriteSaveDataToFile(k_SaveFilePath, new ReportSaveDataRoot<SourceTextureWithCompressionCellData>()
                 {
-                    m_TableData = await FilterDataAsync(m_DataSource.data);
-                    Utilities.WriteSaveDataToFile(k_SaveFilePath, new ReportSaveDataRoot<SourceTextureWithCompressionCellData>()
-                    {
-                        lastCaptureTime = m_DataSource.lastCaptureTime,
-                        root = ReportSaveDataRoot<SourceTextureWithCompressionCellData>.CovertToSaveFormat(m_TableData)
-                    });
-                }
-                else
-                {
-                    m_TableData =ReportSaveDataRoot<SourceTextureWithCompressionCellData>.ConvertToTreeViewItemData(saveFile.root);
-                }
+                    lastCaptureTime = m_DataSource.lastCaptureTime,
+                    root = ReportSaveDataRoot<SourceTextureWithCompressionCellData>.CovertToSaveFormat(m_TableData)
+                });
+            }
+            else
+            {
+                m_TableData = ReportSaveDataRoot<SourceTextureWithCompressionCellData>.ConvertToTreeViewItemData(saveFile.root);
             }
 
-            SortTableData();
+            ApplyActiveSort();
 
             List<int> expandedIds = new();
             if (keepExpand)
@@ -130,52 +129,105 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 }
             }
             m_Table.SetRootItems(m_TableData);
-            if (sortUpdate)
-                m_Table.RefreshItems();
-            else
-                m_Table.Rebuild();
+            m_Table.Rebuild();
             foreach(var expand in expandedIds)
                 m_Table.ExpandItem(expand);
             SetReportListemCount($"{m_TableData.Count}");
             ShowTable(m_TableData.Count > 0, "No Sprite Atlas where source texture has compression found.");
         }
 
-        void SortTableData()
+        void OnColumnSortingChanged()
         {
-            if (MultiColumnViewCompat.HasActiveSort(m_Table))
+            if (m_ApplyingSort || m_TableData.Count < 2)
+                return;
+
+            var savedSort = MultiColumnViewCompat.CopySortedColumns(m_Table.sortedColumns);
+            if (savedSort.Count == 0)
+                return;
+
+            UpdateSortKeys();
+            ApplyActiveSort();
+
+            var expandedRootIds = CollectExpandedRootIds();
+            m_ApplyingSort = true;
+            m_Table.schedule.Execute(() => ApplySortedTreeView(savedSort, expandedRootIds)).StartingIn(0);
+        }
+
+        List<int> CollectExpandedRootIds()
+        {
+            var expandedRootIds = new List<int>();
+            for (int i = 0; i < m_TableData.Count; ++i)
             {
-                var rawData = ReportSaveDataRoot<SourceTextureWithCompressionCellData>.CovertToSaveFormat(m_TableData);
-                SortTableData(rawData);
-                m_TableData = ReportSaveDataRoot<SourceTextureWithCompressionCellData>.ConvertToTreeViewItemData(rawData);
+                if (m_Table.IsExpanded(m_TableData[i].id))
+                    expandedRootIds.Add(m_TableData[i].id);
+            }
+
+            return expandedRootIds;
+        }
+
+        void ApplySortedTreeView(IReadOnlyList<SortColumnDescription> savedSort, List<int> expandedRootIds)
+        {
+            if (m_Table?.panel == null)
+            {
+                m_ApplyingSort = false;
+                return;
+            }
+
+            try
+            {
+                m_Table.columnSortingChanged -= OnColumnSortingChanged;
+                MultiColumnViewCompat.RestoreSortColumnDescriptions(m_Table, savedSort);
+                m_Table.SetRootItems(m_TableData);
+                m_Table.Rebuild();
+                for (int i = 0; i < expandedRootIds.Count; ++i)
+                    m_Table.ExpandItem(expandedRootIds[i]);
+            }
+            finally
+            {
+                m_Table.columnSortingChanged += OnColumnSortingChanged;
+                m_ApplyingSort = false;
             }
         }
 
-        void SortTableData(List<ReportSaveData<SourceTextureWithCompressionCellData>> rawData)
+        void UpdateSortKeys()
         {
-            rawData.Sort(SortData);
-            foreach(var row in rawData)
+            m_SortKeys.Clear();
+            foreach (var sorted in m_Table.sortedColumns)
             {
-                if(row.children != null && row.children.Count > 0)
-                {
-                    row.children.Sort(SortData);
-                    SortTableData(row.children);
-                }
+                var bindingPath = sorted.column != null
+                    ? MultiColumnViewCompat.GetBindingPath(sorted.column)
+                    : sorted.columnName;
+                m_SortKeys.Add((bindingPath, sorted.direction == SortDirection.Ascending ? 1 : -1));
             }
         }
 
-        int SortData(ReportSaveData<SourceTextureWithCompressionCellData> x, ReportSaveData<SourceTextureWithCompressionCellData> y)
+        void ApplyActiveSort()
         {
-            using (var enumerator = m_Table.sortedColumns.GetEnumerator())
+            if (!MultiColumnViewCompat.HasActiveSort(m_Table))
+                return;
+
+            UpdateSortKeys();
+            var rawData = ReportSaveDataRoot<SourceTextureWithCompressionCellData>.CovertToSaveFormat(m_TableData);
+            rawData.Sort(SortSaveData);
+            for (int i = 0; i < rawData.Count; ++i)
             {
-                while (enumerator.MoveNext())
-                {
-                    int result = SourceTextureWithCompressionCellData.Compare(
-                        x.data,
-                        y.data,
-                        MultiColumnViewCompat.GetBindingPath(enumerator.Current.column));
-                    if (result != 0)
-                        return result * (enumerator.Current.direction == SortDirection.Ascending ? 1 : -1);
-                }
+                if (rawData[i].children != null && rawData[i].children.Count > 1)
+                    rawData[i].children.Sort(SortSaveData);
+            }
+
+            m_TableData = ReportSaveDataRoot<SourceTextureWithCompressionCellData>.ConvertToTreeViewItemData(rawData);
+        }
+
+        int SortSaveData(
+            ReportSaveData<SourceTextureWithCompressionCellData> x,
+            ReportSaveData<SourceTextureWithCompressionCellData> y)
+        {
+            for (int i = 0; i < m_SortKeys.Count; ++i)
+            {
+                var (bindingPath, direction) = m_SortKeys[i];
+                int result = SourceTextureWithCompressionCellData.Compare(x.data, y.data, bindingPath);
+                if (result != 0)
+                    return result * direction;
             }
 
             return SourceTextureWithCompressionCellData.Compare(x.data, y.data, null);
@@ -280,20 +332,9 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 {
                     return new CellLabelWithIcon();
                 };
-                MultiColumnViewCompat.SetColumnComparison(column, (a, b) =>
-                {
-                    var itemA = m_Table.GetItemDataForIndex<SourceTextureWithCompressionCellData>(a);
-                    var itemB = m_Table.GetItemDataForIndex<SourceTextureWithCompressionCellData>(b);
-                    return SourceTextureWithCompressionCellData.Compare(itemA, itemB, bindingPath);
-                });
+                // 2022.3 has no ColumnSortingMode.Custom — sorting is handled in OnColumnSortingChanged.
+                MultiColumnViewCompat.SetColumnComparison(column, (a, b) => 0);
             }
-        }
-
-        async void OnColumnSortingChanged()
-        {
-            var savedSort = MultiColumnViewCompat.CopySortedColumns(m_Table.sortedColumns);
-            await UpdateTableView(true, true);
-            MultiColumnViewCompat.RestoreSortColumnDescriptions(m_Table, savedSort);
         }
     }
 }

@@ -45,6 +45,7 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer.UIElement
                 "Texture Format" => "textureFormat",
                 "TextureFormat" => "textureFormat",
                 "Count" => "count",
+                "Page Count" => "pages",
                 _ => column.name
             };
         }
@@ -239,7 +240,10 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer.UIElement
 
         public static void OnListColumnSortingChanged<T>(MultiColumnListView table, List<T> list)
         {
-            if (table == null || list == null)
+            if (table == null || list == null || list.Count < 2)
+                return;
+
+            if (s_ApplyingListSort.TryGetValue(table, out var gate) && gate.applying)
                 return;
 
             var savedSort = CopySortedColumns(table.sortedColumns);
@@ -247,9 +251,32 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer.UIElement
                 return;
 
             SortListBySortedColumns(table, list);
-            RestoreSortColumnDescriptions(table, savedSort);
-            table.RefreshItems();
+
+            gate = new SortApplyingGate { applying = true };
+            s_ApplyingListSort.AddOrUpdate(table, gate);
+            table.schedule.Execute(() =>
+            {
+                try
+                {
+                    if (table.panel == null)
+                        return;
+
+                    RestoreSortColumnDescriptions(table, savedSort);
+                    table.RefreshItems();
+                }
+                finally
+                {
+                    gate.applying = false;
+                }
+            }).StartingIn(0);
         }
+
+        sealed class SortApplyingGate
+        {
+            public bool applying;
+        }
+
+        static readonly ConditionalWeakTable<MultiColumnListView, SortApplyingGate> s_ApplyingListSort = new();
 
         static void EnsureSortingEnabled(MultiColumnListView table, MultiColumnSortBehavior behavior)
         {

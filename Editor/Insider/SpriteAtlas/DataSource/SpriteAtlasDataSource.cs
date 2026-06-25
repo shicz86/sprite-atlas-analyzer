@@ -8,7 +8,7 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
     [Serializable]
     class AtlasSaveData : ISaveData
     {
-        public const int k_Version = 6;
+        public const int k_Version = 7;
         public int version = 0;
         public long lastCaptureTime;
         public EditorAtlasAnalyzerCapture capture;

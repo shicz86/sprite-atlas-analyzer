@@ -9,11 +9,7 @@
                                 show-alternating-row-backgrounds="ContentOnly" reorderable="true" header-title="Reports"
                                 class="issue-list"/>
             <ui:VisualElement name="AnalyzerButtonContainer" picking-mode="Ignore" class="here-be-dragons">
-                <ui:VisualElement class="analyze-button-group">
-                    <ui:Button name="AnalyzeButton" text="Analyze" class="analyze-button"/>
-                    <ui:Button name="AnalyzeDataSourceButton" text="..." tooltip="Configure data sources"
-                               class="analyze-datasource-button"/>
-                </ui:VisualElement>
+                <ui:IMGUIContainer name="AnalyzeButtons" class="analyze-buttons-imgui"/>
                 <ui:VisualElement name="LoadSaveContainer" class="load-save-container" style="flex-grow: 1;">
                     <ui:Button name="SaveButton" text="Save" class="save-button"/>
                     <ui:Button name="LoadButton" text="Load" class="load-button"/>

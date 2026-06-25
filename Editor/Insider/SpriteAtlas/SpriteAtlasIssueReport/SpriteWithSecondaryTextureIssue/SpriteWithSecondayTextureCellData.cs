@@ -24,6 +24,13 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
 
         public static int Compare(SpriteWithSecondayTextureCellData a, SpriteWithSecondayTextureCellData b, string propertyToCompare)
         {
+            if (a == null && b == null)
+                return 0;
+            if (a == null)
+                return -1;
+            if (b == null)
+                return 1;
+
             switch (propertyToCompare)
             {
                 case "name":

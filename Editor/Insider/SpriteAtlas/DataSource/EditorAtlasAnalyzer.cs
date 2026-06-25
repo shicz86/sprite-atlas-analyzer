@@ -106,15 +106,22 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             if (atlasInfo == null)
                 return true;
 
-            if (atlasInfo.spriteInfo.Count > 0 && atlasInfo.totalArea > 0)
-                return false;
-
             var atlas = AssetDatabase.LoadAssetAtPath<SpriteAtlas>(atlasPath);
             if (!atlas)
                 return false;
 
             var packables = atlas.GetPackables();
-            return packables != null && packables.Length > 0;
+            if (packables == null || packables.Length == 0)
+                return false;
+
+            int mappedSprites = 0;
+            for (int i = 0; i < atlasInfo.textureInfo.Count; ++i)
+                mappedSprites += atlasInfo.textureInfo[i].spriteInfo?.Count ?? 0;
+
+            if (mappedSprites > 0 && atlasInfo.totalArea > 0)
+                return false;
+
+            return true;
         }
 
         internal string[] assetSearchPath { get; set; }

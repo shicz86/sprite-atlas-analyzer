@@ -15,6 +15,8 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
         VisualElement m_IssueView;
         MultiColumnTreeView m_Table;
         List<TreeViewItemData<SpriteWithSecondayTextureCellData>> m_TableData = new();
+        readonly List<(string bindingPath, int direction)> m_SortKeys = new();
+        bool m_ApplyingSort;
         Label m_NoDataLabel;
         SpriteAtlasDataSource m_DataSource;
         public SpriteWithSecondaryTextureIssue(): base(new [] {typeof(SpriteAtlasDataSource)})
@@ -25,7 +27,6 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             m_IssueView = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(k_Uxml).Instantiate();
 
             m_Table = m_IssueView.Q<MultiColumnTreeView>("Table");
-            //m_Table.AddManipulator(new ContextualMenuManipulator(OnContextualMenuManipulator));
             m_Table.selectionChanged += OnSelectionChanged;
             if(EditorGUIUtility.isProSkin)
                 m_IssueView.AddToClassList("dark");
@@ -86,7 +87,6 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             SpriteDataProviderFactories spriteDataFactory = new();
             spriteDataFactory.Init();
             var result = new List<TreeViewItemData<SpriteWithSecondayTextureCellData>>();
-            // collect all unique data provider
             var uniqueDataPath = new Dictionary<string, (string assetName, int entityId, int textureCount)>();
             for (int i = 0; i < dataSource?.Count; ++i)
             {
@@ -117,7 +117,6 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             }
 
             int rowId = 0;
-            // check if any of the sprite atlas has different texture count
             for (int i = 0; i < dataSource?.Count; ++i)
             {
                 var atlasInfo = dataSource[i];
@@ -126,7 +125,6 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 if (atlasInfo?.textureInfo.Count <= 0)
                     continue;
 
-                // Get first sprite from first texture to establish baseline
                 EditorSpriteInfo firstSprite = null;
                 foreach (var textureInfo in atlasInfo.textureInfo)
                 {
@@ -165,7 +163,6 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 if (foundDifference)
                 {
                     var children = BuildTextureTree(ref rowId, atlasInfo, uniqueDataPath);
-                    // we have a problematic atlas
                     result.Add(new (rowId++,
                         new SpriteWithSecondayTextureCellData
                         {
@@ -249,44 +246,126 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 {
                     return new CellLabelWithIcon();
                 };
-                MultiColumnViewCompat.SetColumnComparison(column, (a, b) =>
-                {
-                    var itemA = m_Table.GetItemDataForIndex<SpriteWithSecondayTextureCellData>(a);
-                    var itemB = m_Table.GetItemDataForIndex<SpriteWithSecondayTextureCellData>(b);
-                    return SpriteWithSecondayTextureCellData.Compare(itemA, itemB, bindingPath);
-                });
+                MultiColumnViewCompat.SetColumnComparison(column, (a, b) => 0);
             }
         }
 
-        async void OnColumnSortingChanged()
+        void OnColumnSortingChanged()
         {
+            if (m_ApplyingSort || m_TableData.Count < 2)
+                return;
+
             var savedSort = MultiColumnViewCompat.CopySortedColumns(m_Table.sortedColumns);
-            await UpdateTableView(true, true);
-            MultiColumnViewCompat.RestoreSortColumnDescriptions(m_Table, savedSort);
+            if (savedSort.Count == 0)
+                return;
+
+            UpdateSortKeys();
+            ApplyActiveSort();
+
+            var expandedRootIds = CollectExpandedRootIds();
+            m_ApplyingSort = true;
+            m_Table.schedule.Execute(() => ApplySortedTreeView(savedSort, expandedRootIds)).StartingIn(0);
         }
 
-        async Task UpdateTableView(bool keepExpand, bool sortUpdate = false)
+        List<int> CollectExpandedRootIds()
+        {
+            var expandedRootIds = new List<int>();
+            for (int i = 0; i < m_TableData.Count; ++i)
+            {
+                if (m_Table.IsExpanded(m_TableData[i].id))
+                    expandedRootIds.Add(m_TableData[i].id);
+            }
+
+            return expandedRootIds;
+        }
+
+        void ApplySortedTreeView(IReadOnlyList<SortColumnDescription> savedSort, List<int> expandedRootIds)
+        {
+            if (m_Table?.panel == null)
+            {
+                m_ApplyingSort = false;
+                return;
+            }
+
+            try
+            {
+                m_Table.columnSortingChanged -= OnColumnSortingChanged;
+                MultiColumnViewCompat.RestoreSortColumnDescriptions(m_Table, savedSort);
+                m_Table.SetRootItems(m_TableData);
+                m_Table.Rebuild();
+                for (int i = 0; i < expandedRootIds.Count; ++i)
+                    m_Table.ExpandItem(expandedRootIds[i]);
+            }
+            finally
+            {
+                m_Table.columnSortingChanged += OnColumnSortingChanged;
+                m_ApplyingSort = false;
+            }
+        }
+
+        void UpdateSortKeys()
+        {
+            m_SortKeys.Clear();
+            foreach (var sorted in m_Table.sortedColumns)
+            {
+                var bindingPath = sorted.column != null
+                    ? MultiColumnViewCompat.GetBindingPath(sorted.column)
+                    : sorted.columnName;
+                m_SortKeys.Add((bindingPath, sorted.direction == SortDirection.Ascending ? 1 : -1));
+            }
+        }
+
+        void ApplyActiveSort()
+        {
+            if (!MultiColumnViewCompat.HasActiveSort(m_Table))
+                return;
+
+            UpdateSortKeys();
+            var rawData = ReportSaveDataRoot<SpriteWithSecondayTextureCellData>.CovertToSaveFormat(m_TableData);
+            rawData.Sort(SortSaveData);
+            for (int i = 0; i < rawData.Count; ++i)
+            {
+                if (rawData[i].children != null && rawData[i].children.Count > 1)
+                    rawData[i].children.Sort(SortSaveData);
+            }
+
+            m_TableData = ReportSaveDataRoot<SpriteWithSecondayTextureCellData>.ConvertToTreeViewItemData(rawData);
+        }
+
+        int SortSaveData(
+            ReportSaveData<SpriteWithSecondayTextureCellData> x,
+            ReportSaveData<SpriteWithSecondayTextureCellData> y)
+        {
+            for (int i = 0; i < m_SortKeys.Count; ++i)
+            {
+                var (bindingPath, direction) = m_SortKeys[i];
+                int result = SpriteWithSecondayTextureCellData.Compare(x.data, y.data, bindingPath);
+                if (result != 0)
+                    return result * direction;
+            }
+
+            return SpriteWithSecondayTextureCellData.Compare(x.data, y.data, null);
+        }
+
+        async Task UpdateTableView(bool keepExpand)
         {
             ShowTable(false, "Filtering data in progress...");
-            if (!sortUpdate)
+            var saveFile = Utilities.LoadSaveDataFromFile<ReportSaveDataRoot<SpriteWithSecondayTextureCellData>>(k_SaveFilePath);
+            if (saveFile == null || m_DataSource.lastCaptureTime != saveFile.lastCaptureTime)
             {
-                var saveFile = Utilities.LoadSaveDataFromFile<ReportSaveDataRoot<SpriteWithSecondayTextureCellData>>(k_SaveFilePath);
-                if (saveFile == null || saveFile.lastCaptureTime != m_DataSource.lastCaptureTime)
+                m_TableData = await FilterDataAsync(m_DataSource.data);
+                Utilities.WriteSaveDataToFile(k_SaveFilePath, new ReportSaveDataRoot<SpriteWithSecondayTextureCellData>()
                 {
-                    m_TableData = await FilterDataAsync(m_DataSource.data);
-                    Utilities.WriteSaveDataToFile(k_SaveFilePath, new ReportSaveDataRoot<SpriteWithSecondayTextureCellData>()
-                    {
-                        lastCaptureTime = m_DataSource.lastCaptureTime,
-                        root = ReportSaveDataRoot<SpriteWithSecondayTextureCellData>.CovertToSaveFormat(m_TableData)
-                    });
-                }
-                else
-                {
-                    m_TableData = ReportSaveDataRoot<SpriteWithSecondayTextureCellData>.ConvertToTreeViewItemData(saveFile.root);
-                }
+                    lastCaptureTime = m_DataSource.lastCaptureTime,
+                    root = ReportSaveDataRoot<SpriteWithSecondayTextureCellData>.CovertToSaveFormat(m_TableData)
+                });
+            }
+            else
+            {
+                m_TableData = ReportSaveDataRoot<SpriteWithSecondayTextureCellData>.ConvertToTreeViewItemData(saveFile.root);
             }
 
-            SortTableData();
+            ApplyActiveSort();
 
             List<int> expandedIds = new();
             if (keepExpand)
@@ -298,56 +377,12 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 }
             }
             m_Table.SetRootItems(m_TableData);
-            if (sortUpdate)
-                m_Table.RefreshItems();
-            else
-                m_Table.Rebuild();
+            m_Table.Rebuild();
             foreach(var expand in expandedIds)
                 m_Table.ExpandItem(expand);
             isFilteringReport = false;
             SetReportListemCount($"{m_TableData.Count}");
             ShowTable(m_TableData.Count > 0, "No Sprite Atlas where source texture has different secondary texture found.");
-        }
-
-        void SortTableData()
-        {
-            if (MultiColumnViewCompat.HasActiveSort(m_Table))
-            {
-                var rawData = ReportSaveDataRoot<SpriteWithSecondayTextureCellData>.CovertToSaveFormat(m_TableData);
-                SortTableData(rawData);
-                m_TableData = ReportSaveDataRoot<SpriteWithSecondayTextureCellData>.ConvertToTreeViewItemData(rawData);
-            }
-        }
-
-        void SortTableData(List<ReportSaveData<SpriteWithSecondayTextureCellData>> rawData)
-        {
-            rawData.Sort(SortRawData);
-            foreach(var row in rawData)
-            {
-                if(row.children != null && row.children.Count > 0)
-                {
-                    row.children.Sort(SortRawData);
-                    SortTableData(row.children);
-                }
-            }
-        }
-
-        int SortRawData(ReportSaveData<SpriteWithSecondayTextureCellData> x , ReportSaveData<SpriteWithSecondayTextureCellData> y)
-        {
-            using (var enumerator = m_Table.sortedColumns.GetEnumerator())
-            {
-                while (enumerator.MoveNext())
-                {
-                    int result = SpriteWithSecondayTextureCellData.Compare(
-                        x.data,
-                        y.data,
-                        MultiColumnViewCompat.GetBindingPath(enumerator.Current.column));
-                    if (result != 0)
-                        return result * (enumerator.Current.direction == SortDirection.Ascending ? 1 : -1);
-                }
-            }
-
-            return SpriteWithSecondayTextureCellData.Compare(x.data, y.data, null);
         }
     }
 }

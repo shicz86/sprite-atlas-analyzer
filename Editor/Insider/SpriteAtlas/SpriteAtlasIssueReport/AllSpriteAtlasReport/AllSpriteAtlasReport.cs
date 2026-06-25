@@ -16,6 +16,8 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
         MultiColumnTreeView m_Table;
         Label m_NoDataLabel;
         List<TreeViewItemData<AllSpriteAtlasReportCellData>> m_Data = new();
+        readonly List<(string bindingPath, int direction)> m_SortKeys = new();
+        bool m_ApplyingSort;
         ReportListItem m_ReportListItem;
         event Action<IAnalyzerReport, Object> m_OnInspectObject;
 
@@ -145,26 +147,86 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 };
 
                 column.makeCell = () => MultiColumnViewCompat.MakeCellLabelWithIcon();
-                MultiColumnViewCompat.SetColumnComparison(column, (a, b) =>
-                {
-                    var aData = GetCellDataForRow(a);
-                    var bData = GetCellDataForRow(b);
-                    if (aData == null && bData == null)
-                        return 0;
-                    if (aData == null)
-                        return -1;
-                    if (bData == null)
-                        return 1;
-                    return AllSpriteAtlasReportCellData.Compare(aData, bData, bindingPath);
-                });
+                // 2022.3 has no ColumnSortingMode.Custom — avoid built-in sort using row-index lookups.
+                MultiColumnViewCompat.SetColumnComparison(column, (a, b) => 0);
             }
         }
 
         void OnColumnSortingChanged()
         {
+            if (m_ApplyingSort || m_Data.Count < 2)
+                return;
+
             var savedSort = MultiColumnViewCompat.CopySortedColumns(m_Table.sortedColumns);
-            UpdateTableView(true, true);
-            MultiColumnViewCompat.RestoreSortColumnDescriptions(m_Table, savedSort);
+            if (savedSort.Count == 0)
+                return;
+
+            UpdateSortKeys();
+            SortRootData();
+
+            var expandedRootIds = CollectExpandedIds();
+            m_ApplyingSort = true;
+            m_Table.schedule.Execute(() => ApplySortedTreeView(savedSort, expandedRootIds)).StartingIn(0);
+        }
+
+        List<int> CollectExpandedIds()
+        {
+            var expandedIds = new List<int>();
+            CollectExpandedIds(m_Data, expandedIds);
+            return expandedIds;
+        }
+
+        void CollectExpandedIds(
+            IEnumerable<TreeViewItemData<AllSpriteAtlasReportCellData>> nodes,
+            List<int> expandedIds)
+        {
+            if (nodes == null)
+                return;
+
+            foreach (var node in nodes)
+            {
+                if (!m_Table.IsExpanded(node.id))
+                    continue;
+
+                expandedIds.Add(node.id);
+                if (node.hasChildren)
+                    CollectExpandedIds(node.children, expandedIds);
+            }
+        }
+
+        void ApplySortedTreeView(IReadOnlyList<SortColumnDescription> savedSort, List<int> expandedIds)
+        {
+            if (m_Table?.panel == null)
+            {
+                m_ApplyingSort = false;
+                return;
+            }
+
+            try
+            {
+                m_Table.columnSortingChanged -= OnColumnSortingChanged;
+                MultiColumnViewCompat.RestoreSortColumnDescriptions(m_Table, savedSort);
+                m_Table.SetRootItems(m_Data);
+                m_Table.Rebuild();
+                for (int i = 0; i < expandedIds.Count; ++i)
+                    m_Table.ExpandItem(expandedIds[i]);
+            }
+            finally
+            {
+                m_Table.columnSortingChanged += OnColumnSortingChanged;
+                m_ApplyingSort = false;
+            }
+        }
+
+        void SortRootData()
+        {
+            if (!MultiColumnViewCompat.HasActiveSort(m_Table))
+                return;
+
+            var rawData = ReportSaveDataRoot<AllSpriteAtlasReportCellData>.CovertToSaveFormat(m_Data);
+            rawData.Sort(SortSaveData);
+            m_Data.Clear();
+            m_Data.AddRange(ReportSaveDataRoot<AllSpriteAtlasReportCellData>.ConvertToTreeViewItemData(rawData));
         }
 
         public VisualElement listItem => m_ReportListItem;
@@ -197,27 +259,29 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             UpdateTableView(false);
         }
 
-        void UpdateTableView(bool keepExpand, bool sortUpdate = false)
+        void UpdateTableView(bool keepExpand)
         {
             BuildAltasInfoDataTree();
+
             m_ReportListItem.SetCount($"{GetRootAtlasCount()}");
-            List<int> expandedIds = new();
-            if (keepExpand)
-            {
-                foreach (var d in m_Data)
-                {
-                    if(m_Table.IsExpanded(d.id))
-                        expandedIds.Add(d.id);
-                }
-            }
+            var expandedIds = keepExpand ? CollectExpandedIds() : new List<int>();
             m_Table.SetRootItems(m_Data);
-            if (sortUpdate)
-                m_Table.RefreshItems();
-            else
-                m_Table.Rebuild();
+            m_Table.Rebuild();
             foreach(var expand in expandedIds)
                 m_Table.ExpandItem(expand);
             ShowTable(m_Data.Count > 0, "No Sprite Atlas found.");
+        }
+
+        void UpdateSortKeys()
+        {
+            m_SortKeys.Clear();
+            foreach (var sorted in m_Table.sortedColumns)
+            {
+                var bindingPath = sorted.column != null
+                    ? MultiColumnViewCompat.GetBindingPath(sorted.column)
+                    : sorted.columnName;
+                m_SortKeys.Add((bindingPath, sorted.direction == SortDirection.Ascending ? 1 : -1));
+            }
         }
 
         void BuildAltasInfoDataTree()
@@ -260,9 +324,6 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 var atlasCellData = new AllSpriteAtlasReportCellData(atlasData[i]) { icon = "spriteatlas-icon" };
                 m_Data.Add(new TreeViewItemData<AllSpriteAtlasReportCellData>(++id, atlasCellData));
             }
-
-            if (MultiColumnViewCompat.HasActiveSort(m_Table))
-                m_Data.Sort(SortData);
         }
 
         static bool HasMasterInCapture(List<EditorAtlasInfo> atlasData, EditorAtlasInfo variantAtlas)
@@ -295,23 +356,16 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             return count;
         }
 
-        int SortData(TreeViewItemData<AllSpriteAtlasReportCellData> a, TreeViewItemData<AllSpriteAtlasReportCellData> b)
+        int SortSaveData(
+            ReportSaveData<AllSpriteAtlasReportCellData> a,
+            ReportSaveData<AllSpriteAtlasReportCellData> b)
         {
-            using (var enumerator = m_Table.sortedColumns.GetEnumerator())
+            for (int i = 0; i < m_SortKeys.Count; ++i)
             {
-                while (enumerator.MoveNext())
-                {
-                    var sortColumn = enumerator.Current.column;
-                    var bindingPath = sortColumn != null
-                        ? MultiColumnViewCompat.GetBindingPath(sortColumn)
-                        : enumerator.Current.columnName;
-                    int result = AllSpriteAtlasReportCellData.Compare(
-                        a.data,
-                        b.data,
-                        bindingPath);
-                    if (result != 0)
-                        return result * (enumerator.Current.direction == SortDirection.Ascending ? 1 : -1);
-                }
+                var (bindingPath, direction) = m_SortKeys[i];
+                int result = AllSpriteAtlasReportCellData.Compare(a.data, b.data, bindingPath);
+                if (result != 0)
+                    return result * direction;
             }
 
             return AllSpriteAtlasReportCellData.Compare(a.data, b.data, null);
@@ -325,29 +379,27 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             {
                 for (int i = 0; i < textureInfo.Count; ++i)
                 {
+                    var pageInfo = textureInfo[i];
                     List<TreeViewItemData<AllSpriteAtlasReportCellData>> spriteNodes = null;
-                    if (textureInfo[i].spriteInfo != null)
+                    var pageSprites = pageInfo.spriteInfo;
+                    if (pageSprites != null && pageSprites.Count > 0)
                     {
-                        spriteNodes = new();
-                        foreach(var sprite in textureInfo[i].spriteInfo)
+                        spriteNodes = new List<TreeViewItemData<AllSpriteAtlasReportCellData>>(pageSprites.Count);
+                        for (int s = 0; s < pageSprites.Count; ++s)
                         {
-                            spriteNodes.Add(new TreeViewItemData<AllSpriteAtlasReportCellData>(++id, new AllSpriteAtlasReportCellData(atlasInfo, sprite)
-                            {
-                                icon = "sprite-icon"
-                            }));
+                            spriteNodes.Add(new TreeViewItemData<AllSpriteAtlasReportCellData>(++id,
+                                new AllSpriteAtlasReportCellData(atlasInfo, pageSprites[s])
+                                {
+                                    icon = "sprite-icon"
+                                }));
                         }
-                        if (MultiColumnViewCompat.HasActiveSort(m_Table))
-                            spriteNodes.Sort(SortData);
                     }
-                    var textureNode = new TreeViewItemData<AllSpriteAtlasReportCellData>(++id,
-                        new AllSpriteAtlasReportCellData(atlasInfo, textureInfo[i]) { icon = "texture-icon" }, spriteNodes);
-                    data.Add(textureNode);
 
+                    data.Add(new TreeViewItemData<AllSpriteAtlasReportCellData>(++id,
+                        new AllSpriteAtlasReportCellData(atlasInfo, pageInfo) { icon = "texture-icon" },
+                        spriteNodes));
                 }
             }
-
-            if (MultiColumnViewCompat.HasActiveSort(m_Table))
-                data.Sort(SortData);
 
             return data;
         }

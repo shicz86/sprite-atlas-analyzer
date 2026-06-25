@@ -7,7 +7,7 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
     [Serializable]
     class AllSpriteAtlasReportCellData
     {
-        public const int k_Version = 11;
+        public const int k_Version = 15;
 
         public string name;
         public string sprites;
@@ -101,15 +101,12 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             asset = info.GetObject();
             atlasAsset = asset;
 
+            spritesValue = info.GetDisplaySpriteCount();
+            sprites = $"{spritesValue}";
+
             if (info.isVariant)
                 return;
-            spritesValue = 0;
 
-            foreach(var textureInfo in info.textureInfo)
-            {
-                spritesValue += textureInfo.spriteInfo?.Count ?? 0;
-            }
-            sprites = $"{spritesValue}";
             usageValue = info.usedRatio;
             usage = info.usedRatio.ToString("0.0 %");
             totalMemoryValue = info.memorySize;
@@ -151,6 +148,13 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
 
         public static int Compare(AllSpriteAtlasReportCellData a, AllSpriteAtlasReportCellData b, string propertyToCompare)
         {
+            if (a == null && b == null)
+                return 0;
+            if (a == null)
+                return -1;
+            if (b == null)
+                return 1;
+
             switch (propertyToCompare)
             {
                 case "name":

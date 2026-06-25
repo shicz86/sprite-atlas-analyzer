@@ -28,6 +28,8 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
         SerializableGuid m_AtlasGuid;
         [SerializeField]
         int m_ActiveBuildTarget;
+        [SerializeField]
+        int m_PackableSpriteCount;
 
         public EditorAtlasInfo(int instanceId, string assetPath)
             : base(instanceId, assetPath) { }
@@ -66,6 +68,7 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             }
 
             var sprites = CollectSpritesFromPackables(packables);
+            m_PackableSpriteCount = sprites.Count;
             var textures = GetAtlasMainTextures(atlas);
 
             if ((sprites.Count > 0 && textures.Count == 0) || !atlas.IsIncludeInBuild())
@@ -88,6 +91,8 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             {
                 await CollectFromPackedTextures(atlas, masterAtlas, sprites, textures);
             }
+
+            EnsurePackableSpritesMapped(sprites);
 
             m_TextureInfo.Sort((x, y) => string.Compare(x.name, y.name, StringComparison.Ordinal));
             for (int i = 0; i < m_TextureInfo.Count; ++i)
@@ -134,8 +139,7 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 foreach (var sprite in sprites)
                 {
                     var spriteGUID = sprite.sprite.GetSpriteID();
-                    var assetGUID = sprite.assetGUID;
-                    if (spriteGUID == fitData.GetSpriteID(i) && assetGUID == fitData.GetGUID(i))
+                    if (spriteGUID == fitData.GetSpriteID(i))
                     {
                         editorTextureInfo.AddSpriteInfo(sprite.sprite);
                         break;
@@ -279,13 +283,63 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 var texturePath = AssetDatabase.GetAssetPath(texture);
                 var editorTextureInfo = new EditorTextureInfo(texture.GetInstanceID(), texturePath);
                 editorTextureInfo.CollectInfo(texture, m_TextureFormat);
-                if (spriteDict.TryGetValue(texture.GetInstanceID(), out var spriteList))
-                {
-                    foreach (var sprite in spriteList)
-                        editorTextureInfo.AddSpriteInfo(sprite, bindAtlas: true);
-                }
+                if (!spriteDict.TryGetValue(texture.GetInstanceID(), out var spriteList) || spriteList.Count == 0)
+                    spriteList = BuildSpriteListForTexture(texture, sprites);
+                foreach (var sprite in spriteList)
+                    editorTextureInfo.AddSpriteInfo(sprite, bindAtlas: true);
                 m_TextureInfo.Add(editorTextureInfo);
             }
+        }
+
+        static List<Sprite> BuildSpriteListForTexture(
+            Texture2D texture,
+            List<(Sprite sprite, GUID assetGUID)> sprites)
+        {
+            var list = new List<Sprite>();
+            if (texture == null || sprites == null)
+                return list;
+
+            var texturePath = AssetDatabase.GetAssetPath(texture);
+            var textureId = texture.GetInstanceID();
+            for (int j = 0; j < sprites.Count; ++j)
+            {
+                var packedTexture = SpriteAtlasBridgeCompat.GetSpriteTexture(sprites[j].sprite, true);
+                if (!packedTexture)
+                    continue;
+
+                if (packedTexture == texture
+                    || packedTexture.GetInstanceID() == textureId
+                    || AssetDatabase.GetAssetPath(packedTexture) == texturePath)
+                {
+                    list.Add(sprites[j].sprite);
+                }
+            }
+
+            return list;
+        }
+
+        void EnsurePackableSpritesMapped(List<(Sprite sprite, GUID assetGUID)> sprites)
+        {
+            if (sprites == null || sprites.Count == 0 || m_TextureInfo.Count == 0)
+                return;
+
+            int mapped = 0;
+            for (int i = 0; i < m_TextureInfo.Count; ++i)
+                mapped += m_TextureInfo[i].spriteInfo?.Count ?? 0;
+
+            if (mapped > 0)
+                return;
+
+            for (int i = 0; i < sprites.Count; ++i)
+                m_TextureInfo[0].AddSpriteInfo(sprites[i].sprite, bindAtlas: true);
+        }
+
+        public int GetDisplaySpriteCount()
+        {
+            int count = 0;
+            for (int i = 0; i < m_TextureInfo.Count; ++i)
+                count += m_TextureInfo[i].spriteInfo?.Count ?? 0;
+            return count > 0 ? count : m_PackableSpriteCount;
         }
 
         static List<Texture2D> GetAtlasMainTextures(SpriteAtlas atlas, bool warnIfEmpty = false)

@@ -38,7 +38,7 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             m_Settings = new AtlasPageSettings(m_PageCont);
             m_Settings.pageCountChanged += OnSettingsPageCountChanged;
             m_Table = m_View.table;
-            MultiColumnViewCompat.EnableColumnSorting(m_Table, MultiColumnSortBehavior.Default);
+            MultiColumnViewCompat.EnableColumnSorting(m_Table, MultiColumnSortBehavior.Custom);
             m_Table.columnSortingChanged += OnColumnSortingChanged;
             m_Table.AddManipulator(new ContextualMenuManipulator(OnContextualMenuManipulator));
             table.selectionChanged += OnSelectionChanged;

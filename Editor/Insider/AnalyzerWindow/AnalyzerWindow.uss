@@ -23,69 +23,12 @@
     flex-direction: row;
 }
 
-.analyze-button-group {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-}
-
-.analyze-button {
-    width: 150px;
+.analyze-buttons-imgui {
     height: 30px;
-    overflow: hidden;
-    background-color: rgb(14, 142, 87);
-    color: rgb(255, 255, 255);
-    margin: 0;
-    padding: 0;
-    border-width: 0;
-    border-radius: 4px 0 0 4px;
-    -unity-text-align: middle-center;
-    align-items: center;
-    justify-content: center;
-}
-
-.analyze-button:hover {
-    background-color: rgb(14, 152, 87);
-}
-
-.analyze-datasource-button {
-    width: 24px;
-    height: 30px;
-    background-color: rgb(14, 142, 87);
-    color: rgb(255, 255, 255);
-    border-left-color: rgba(0, 0, 0, 0.25);
-    border-left-width: 1px;
-    border-top-width: 0;
-    border-right-width: 0;
-    border-bottom-width: 0;
-    border-radius: 0 4px 4px 0;
-    margin: 0;
-    padding: 0;
-    -unity-text-align: middle-center;
-    align-items: center;
-    justify-content: center;
-}
-
-.analyze-datasource-button:hover {
-    background-color: rgb(14, 152, 87);
-}
-
-.analyze-button-stop:disabled {
-    margin: 0;
-    padding: 0;
-    height: 31px;
-}
-
-.analyze-button-stop {
-    background-color: rgb(235, 87, 87);
-    color: rgb(255, 255, 255);
-    -unity-text-align: middle-center;
-    align-items: center;
-    justify-content: center;
-}
-
-.analyze-button-stop:hover {
-    background-color: rgb(255, 87, 87);
+    min-height: 30px;
+    max-height: 30px;
+    flex-shrink: 0;
+    align-self: center;
 }
 
 .load-save-container {

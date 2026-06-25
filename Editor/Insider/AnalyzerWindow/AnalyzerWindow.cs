@@ -17,8 +17,14 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
         List<IAnalyzerReport> m_Reports;
         List<IReportDataSource> m_DataSource;
         event Action m_OnDataSourceChange;
-        Button m_AnalyzeButton;
-        Button m_AnalyzeDataSourceButton;
+        IMGUIContainer m_AnalyzeButtonsIMGUI;
+        bool m_AnalyzeButtonsEnabled = true;
+        bool m_ShowAnalyzeDataSourceButton = true;
+        bool m_AnalyzeButtonStylesInitialized;
+        GUIStyle m_AnalyzeButtonStyle;
+        GUIStyle m_AnalyzeStopButtonStyle;
+        GUIStyle m_AnalyzeDataSourceButtonStyle;
+        GUIStyle m_AnalyzeDataSourceStopButtonStyle;
         Button m_ClearDataSourceDataButton;
         ReportListView m_ReportListView;
         VisualElement m_ReportContentView;
@@ -71,10 +77,7 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
         void Capture(string[] path, bool enableAll)
         {
             m_Capturing = true;
-            m_AnalyzeButton.AddToClassList("analyze-button-stop");
-            m_AnalyzeDataSourceButton.AddToClassList("analyze-button-stop");
-            m_AnalyzeButton.text = "Stop";
-            m_AnalyzeDataSourceButton.SetEnabled(false);
+            RepaintAnalyzeButtons();
             int dataSourceCapturing = 0;
             enableAll |= m_SaveData.reportDataSource.Count == 1;
             for(int i = 0; i < m_SaveData.reportDataSource.Count; ++i)
@@ -171,10 +174,8 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             m_ReportListView.SetListDataSource(m_Reports);
             m_ReportListView.itemIndexChanged += OnItemIndexChanged;
 
-            m_AnalyzeButton = view.Q<Button>("AnalyzeButton");
-            m_AnalyzeButton.clicked += OnAnalyzeButtonClicked;
-            m_AnalyzeDataSourceButton = view.Q<Button>("AnalyzeDataSourceButton");
-            m_AnalyzeDataSourceButton.clicked += OnAnalyzeDataSourceButtonClicked;
+            m_AnalyzeButtonsIMGUI = view.Q<IMGUIContainer>("AnalyzeButtons");
+            m_AnalyzeButtonsIMGUI.onGUIHandler = DrawAnalyzeButtons;
 
             m_HelpButton = view.Q<Button>("HelpButton");
             m_HelpButton.clicked += () =>
@@ -186,6 +187,102 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                     "OK");
             };
             return view;
+        }
+
+        void EnsureAnalyzeButtonStyles()
+        {
+            if (m_AnalyzeButtonStylesInitialized)
+                return;
+
+            m_AnalyzeButtonStyle = CreateFlatButtonStyle(
+                new Color(14f / 255f, 142f / 255f, 87f / 255f),
+                new Color(14f / 255f, 152f / 255f, 87f / 255f));
+            m_AnalyzeStopButtonStyle = CreateFlatButtonStyle(
+                new Color(235f / 255f, 87f / 255f, 87f / 255f),
+                new Color(255f / 255f, 87f / 255f, 87f / 255f));
+            m_AnalyzeDataSourceButtonStyle = CreateFlatButtonStyle(
+                new Color(11f / 255f, 116f / 255f, 71f / 255f),
+                new Color(12f / 255f, 125f / 255f, 76f / 255f));
+            m_AnalyzeDataSourceStopButtonStyle = CreateFlatButtonStyle(
+                new Color(198f / 255f, 73f / 255f, 73f / 255f),
+                new Color(215f / 255f, 80f / 255f, 80f / 255f));
+            m_AnalyzeButtonStylesInitialized = true;
+        }
+
+        static GUIStyle CreateFlatButtonStyle(Color normalColor, Color hoverColor)
+        {
+            var style = new GUIStyle(GUI.skin.button)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                border = new RectOffset(0, 0, 0, 0),
+                margin = new RectOffset(0, 0, 0, 0),
+                padding = new RectOffset(0, 0, 0, 0),
+                fontStyle = FontStyle.Normal
+            };
+
+            var normalBackground = CreateSolidTexture(normalColor);
+            var hoverBackground = CreateSolidTexture(hoverColor);
+            style.normal.background = normalBackground;
+            style.hover.background = hoverBackground;
+            style.active.background = hoverBackground;
+            style.focused.background = normalBackground;
+            style.onNormal.background = normalBackground;
+            style.onHover.background = hoverBackground;
+            style.onActive.background = hoverBackground;
+            style.onFocused.background = normalBackground;
+            style.normal.textColor = Color.white;
+            style.hover.textColor = Color.white;
+            style.active.textColor = Color.white;
+            style.focused.textColor = Color.white;
+            style.onNormal.textColor = Color.white;
+            style.onHover.textColor = Color.white;
+            style.onActive.textColor = Color.white;
+            style.onFocused.textColor = Color.white;
+            return style;
+        }
+
+        static Texture2D CreateSolidTexture(Color color)
+        {
+            var texture = new Texture2D(1, 1, TextureFormat.RGBA32, false)
+            {
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            texture.SetPixel(0, 0, color);
+            texture.Apply();
+            return texture;
+        }
+
+        void DrawAnalyzeButtons()
+        {
+            EnsureAnalyzeButtonStyles();
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.FlexibleSpace();
+
+                var previousEnabled = GUI.enabled;
+                GUI.enabled = m_AnalyzeButtonsEnabled;
+
+                var mainStyle = m_Capturing ? m_AnalyzeStopButtonStyle : m_AnalyzeButtonStyle;
+                var rightStyle = m_Capturing ? m_AnalyzeDataSourceStopButtonStyle : m_AnalyzeDataSourceButtonStyle;
+                if (GUILayout.Button(m_Capturing ? "Stop" : "Analyze", mainStyle, GUILayout.Width(150), GUILayout.Height(30)))
+                    EditorApplication.delayCall += () => _ = Analyze(null);
+
+                if (m_ShowAnalyzeDataSourceButton)
+                {
+                    GUI.enabled = m_AnalyzeButtonsEnabled && !m_Capturing;
+                    if (GUILayout.Button("...", rightStyle, GUILayout.Width(20), GUILayout.Height(30)))
+                        EditorApplication.delayCall += OnAnalyzeDataSourceButtonClicked;
+                }
+
+                GUI.enabled = previousEnabled;
+                GUILayout.FlexibleSpace();
+            }
+        }
+
+        void RepaintAnalyzeButtons()
+        {
+            m_AnalyzeButtonsIMGUI?.MarkDirtyRepaint();
         }
 
         void OnAnalyzeDataSourceButtonClicked()
@@ -233,7 +330,7 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 m_SaveData.reportDataSource = dataSourceData;
                 if (m_DataSource.Count < 1)
                 {
-                    m_AnalyzeDataSourceButton.visible = false;
+                    m_ShowAnalyzeDataSourceButton = false;
                 }
             }
 
@@ -255,12 +352,6 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             m_Reports = m_SaveData.OrderReport(m_AllReports);
         }
 
-        async void OnAnalyzeButtonClicked()
-        {
-            await Analyze(null);
-        }
-
-
        async void OnDataSourceCaptureEnd(IReportDataSource dataSource)
         {
             if (m_Capturing)
@@ -270,7 +361,8 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                     if (m_DataSource[i].capturing)
                         return;
                 }
-                m_AnalyzeButton.SetEnabled(false);
+                m_AnalyzeButtonsEnabled = false;
+                RepaintAnalyzeButtons();
                 var saveData = new SaveData();
                 for(int i = 0; i < m_DataSource.Count; ++i)
                 {
@@ -281,12 +373,9 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
 
                 await UnloadResources();
 
-                m_AnalyzeButton.RemoveFromClassList("analyze-button-stop");
-                m_AnalyzeDataSourceButton.RemoveFromClassList("analyze-button-stop");
-                m_AnalyzeButton.text = "Analyze";
                 m_Capturing = false;
-                m_AnalyzeButton.SetEnabled(true);
-                m_AnalyzeDataSourceButton.SetEnabled(true);
+                m_AnalyzeButtonsEnabled = true;
+                RepaintAnalyzeButtons();
             }
         }
 
