@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Threading.Tasks;
 using UnityEditor.Sprites;
@@ -88,6 +89,53 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             }
 
             return Array.Empty<Texture2D>();
+        }
+
+        public static List<Texture2D> GetAtlasMainTextures(SpriteAtlas atlas, bool warnIfEmpty = false)
+        {
+            var textures = GetSpriteAtlasTextures(atlas, warnIfEmpty);
+            var mainTextures = new List<Texture2D>(textures.Length);
+            for (int i = 0; i < textures.Length; ++i)
+            {
+                var texName = textures[i].name;
+                int j = 0;
+                for (; j < textures.Length; ++j)
+                {
+                    if (j == i)
+                        continue;
+                    if (texName.StartsWith(textures[j].name))
+                        break;
+                }
+
+                if (j >= textures.Length)
+                    mainTextures.Add(textures[i]);
+            }
+
+            return mainTextures;
+        }
+
+        public static Texture2D GetAtlasMainTextureForPage(SpriteAtlas atlas, int pageIndex, bool ensurePacked = false)
+        {
+            if (!atlas || pageIndex < 0)
+                return null;
+
+            var mainTextures = GetSortedAtlasMainTextures(atlas, ensurePacked);
+            return pageIndex < mainTextures.Count ? mainTextures[pageIndex] : null;
+        }
+
+        static List<Texture2D> GetSortedAtlasMainTextures(SpriteAtlas atlas, bool ensurePacked)
+        {
+            var mainTextures = GetAtlasMainTextures(atlas);
+            if (mainTextures.Count == 0 && ensurePacked)
+            {
+                PackAtlas(atlas);
+                mainTextures = GetAtlasMainTextures(atlas);
+            }
+
+            if (mainTextures.Count > 1)
+                mainTextures.Sort((a, b) => string.Compare(a.name, b.name, StringComparison.Ordinal));
+
+            return mainTextures;
         }
 
         public static Texture2D GetSpriteTexture(Sprite sprite, bool fromAtlas)

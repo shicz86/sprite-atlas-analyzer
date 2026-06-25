@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEditor.U2D.SpriteAtlasAnalyzer.UIElement;
 using UnityEngine;
+using UnityEngine.U2D;
 using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 
@@ -63,7 +64,26 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
         {
             var cellData = GetCellDataForRow(m_Table.selectedIndex);
             if(cellData != null)
-                m_OnInspectObject?.Invoke(this, cellData.asset.GetAsset());
+                m_OnInspectObject?.Invoke(this, ResolveInspectableObject(cellData));
+        }
+
+        static Object ResolveInspectableObject(AllSpriteAtlasReportCellData cellData)
+        {
+            var obj = cellData.asset.GetAsset();
+            if (obj)
+                return obj;
+
+            if (cellData.texturePageIndex < 0 || cellData.icon != "texture-icon")
+                return null;
+
+            var atlas = cellData.atlasAsset.GetAsset() as SpriteAtlas;
+            if (!atlas)
+                return null;
+
+            return SpriteAtlasBridgeCompat.GetAtlasMainTextureForPage(
+                atlas,
+                cellData.texturePageIndex,
+                ensurePacked: true);
         }
 
 
@@ -396,7 +416,11 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                     }
 
                     data.Add(new TreeViewItemData<AllSpriteAtlasReportCellData>(++id,
-                        new AllSpriteAtlasReportCellData(atlasInfo, pageInfo) { icon = "texture-icon" },
+                        new AllSpriteAtlasReportCellData(atlasInfo, pageInfo)
+                        {
+                            icon = "texture-icon",
+                            texturePageIndex = i
+                        },
                         spriteNodes));
                 }
             }

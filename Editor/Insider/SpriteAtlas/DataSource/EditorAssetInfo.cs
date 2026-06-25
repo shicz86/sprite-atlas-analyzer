@@ -16,9 +16,10 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
 
         public EditorAssetInfo(int instanceId, string assetPath)
         {
-            m_Object = instanceId;
             m_AssetPath = assetPath;
-            m_Name = m_Object.GetAsset()?.name ?? $"{instanceId}_No_Name";
+            var obj = EditorUtility.InstanceIDToObject(instanceId);
+            m_Object = obj != null ? (Object)obj : (LazyLoadReference<Object>)instanceId;
+            m_Name = m_Object.GetAsset()?.name ?? obj?.name ?? $"{instanceId}";
         }
 
         public virtual string assetPath => m_AssetPath;

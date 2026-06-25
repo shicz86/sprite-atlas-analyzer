@@ -390,7 +390,6 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
                 await Task.Delay(100);
             }
             progress.EndProgressTrack();
-            SpriteAtlasBridgeCompat.CleanupAtlasPacking();
         }
 
         static List<IAnalyzerReport> CollectAnalyzerReport(IDataSourceProvider dataSourceProvider)
@@ -505,7 +504,11 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
 
         public void SelectUnityObject(IAnalyzerReport report, Object obj)
         {
+            if (!obj)
+                return;
+
             Selection.activeObject = obj;
+            EditorGUIUtility.PingObject(obj);
         }
 
         void OnSelectionChanged(IEnumerable<object> _)

@@ -40,6 +40,7 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
         public string packingMode;
         public string textureFormat;
         public string icon;
+        public int texturePageIndex = -1;
         public LazyLoadReference<Object> asset;
         public LazyLoadReference<Object> atlasAsset;
         public AllSpriteAtlasReportCellData(EditorAtlasInfo atlasInfo, EditorSpriteInfo info)

@@ -48,12 +48,13 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             var obj = EditorUtility.InstanceIDToObject(instanceId);
             if (obj != null)
             {
+                m_InstanceId = obj.GetInstanceID();
                 m_ValidReference = AssetDatabase.TryGetGUIDAndLocalFileIdentifier(obj, out string guid, out m_LocalFileID);
                 m_GUID = new SerializableGuid(guid);
             }
             else
             {
-                m_InstanceId = 0;
+                m_InstanceId = instanceId;
                 m_LocalFileID = 0;
                 m_GUID = new SerializableGuid(new GUID());
             }
@@ -65,14 +66,28 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
 
         public T GetAsset()
         {
-            if (!m_ValidReference)
-                return null;
-
             ResolveInstanceIdIfNeeded();
-            if (m_InstanceId == 0)
-                return null;
+            if (m_InstanceId != 0)
+            {
+                var obj = EditorUtility.InstanceIDToObject(m_InstanceId) as T;
+                if (obj)
+                    return obj;
+            }
 
-            return EditorUtility.InstanceIDToObject(m_InstanceId) as T;
+            if (!string.IsNullOrEmpty(m_GlobalObjectIDString))
+            {
+                if (m_GlobalObjectID.assetGUID == new GUID())
+                    GlobalObjectId.TryParse(m_GlobalObjectIDString, out m_GlobalObjectID);
+
+                var fromGlobal = GlobalObjectId.GlobalObjectIdentifierToObjectSlow(m_GlobalObjectID) as T;
+                if (fromGlobal)
+                {
+                    m_InstanceId = fromGlobal.GetInstanceID();
+                    return fromGlobal;
+                }
+            }
+
+            return null;
         }
 
         void ResolveInstanceIdIfNeeded()
@@ -80,13 +95,23 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
             if (m_InstanceId != 0 && EditorUtility.InstanceIDToObject(m_InstanceId) != null)
                 return;
 
+            if (m_InstanceId != 0)
+            {
+                var obj = EditorUtility.InstanceIDToObject(m_InstanceId);
+                if (obj)
+                    return;
+            }
+
             m_InstanceId = 0;
+            if (string.IsNullOrEmpty(m_GlobalObjectIDString))
+                return;
+
             if (m_GlobalObjectID.assetGUID == new GUID())
                 GlobalObjectId.TryParse(m_GlobalObjectIDString, out m_GlobalObjectID);
 
-            var obj = GlobalObjectId.GlobalObjectIdentifierToObjectSlow(m_GlobalObjectID);
-            if (obj)
-                m_InstanceId = obj.GetInstanceID();
+            var resolved = GlobalObjectId.GlobalObjectIdentifierToObjectSlow(m_GlobalObjectID);
+            if (resolved)
+                m_InstanceId = resolved.GetInstanceID();
         }
 
         public int instanceId

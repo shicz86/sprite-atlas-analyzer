@@ -344,23 +344,7 @@ namespace UnityEditor.U2D.SpriteAtlasAnalyzer
 
         static List<Texture2D> GetAtlasMainTextures(SpriteAtlas atlas, bool warnIfEmpty = false)
         {
-            var textures = SpriteAtlasBridgeCompat.GetSpriteAtlasTextures(atlas, warnIfEmpty);
-            var mainTextures = new List<Texture2D>();
-            for (int i = 0; i < textures.Length; ++i)
-            {
-                var texName = textures[i].name;
-                int j = 0;
-                for (; j < textures.Length; ++j)
-                {
-                    if (j == i)
-                        continue;
-                    if (texName.StartsWith(textures[j].name))
-                        break;
-                }
-                if (j >= textures.Length)
-                    mainTextures.Add(textures[i]);
-            }
-            return mainTextures;
+            return SpriteAtlasBridgeCompat.GetAtlasMainTextures(atlas, warnIfEmpty);
         }
 
         public virtual List<EditorTextureInfo> textureInfo => m_TextureInfo;
